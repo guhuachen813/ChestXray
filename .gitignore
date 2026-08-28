@@ -1,0 +1,35 @@
+# Dataset files: CheXpert images and archives must not enter Git.
+data/raw/
+*.zip
+*.tar
+*.tar.gz
+
+# Generated manifests may contain machine-specific absolute paths.
+data/manifests/*.csv
+data/splits/*.csv
+
+# Training outputs and checkpoints.
+outputs/
+*.pt
+*.pth
+*.ckpt
+
+# Python caches and local environments.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Logs, notebooks checkpoints, and OS/editor files.
+*.log
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local secrets and configuration overrides.
+.env
+.env.*
+!.env.example

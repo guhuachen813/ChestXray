@@ -1,0 +1,35 @@
+{
+  "data_root": "D:\\research\\project\\data\\raw\\CheXpert-v1.0-small\\CheXpert-v1.0-small",
+  "label": "Cardiomegaly",
+  "rows": 191229,
+  "frontal_rows": 191229,
+  "missing_files": 0,
+  "split_rows": {
+    "train": 191027,
+    "valid": 202
+  },
+  "patient_counts": {
+    "train": 64534,
+    "valid": 200
+  },
+  "label_counts_by_split": {
+    "train": {
+      "nan": 153066,
+      "1.0": 23385,
+      "0.0": 7869,
+      "-1.0": 6707
+    },
+    "valid": {
+      "0.0": 136,
+      "1.0": 66
+    }
+  },
+  "view_counts_by_split": {
+    "train": {
+      "Frontal": 191027
+    },
+    "valid": {
+      "Frontal": 202
+    }
+  }
+}

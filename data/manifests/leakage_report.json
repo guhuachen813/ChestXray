@@ -1,0 +1,7 @@
+{
+  "train_valid_patient_overlap_count": 0,
+  "train_valid_patient_overlap_examples": [],
+  "duplicate_image_paths": 0,
+  "duplicate_studies": 191138,
+  "status": "PASS"
+}

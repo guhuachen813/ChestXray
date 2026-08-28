@@ -1,0 +1,17 @@
+data:
+  root: data/raw/CheXpert-v1.0-small
+  manifest: data/manifests/cardiomegaly_all.csv
+  label: Cardiomegaly
+  frontal_only: true
+
+training:
+  model: densenet121
+  image_size: 320
+  batch_size: 16
+  epochs: 10
+  seed: 42
+  num_workers: 2
+
+evaluation:
+  metrics: [auroc, auprc, sensitivity, specificity, f1, brier]
+  threshold_source: internal_validation

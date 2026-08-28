@@ -1,0 +1,21 @@
+{
+  "seed": 42,
+  "val_fraction": 0.2,
+  "rows": 31456,
+  "patient_counts": {
+    "internal_train": 13935,
+    "internal_val": 3484,
+    "official_valid": 200
+  },
+  "row_counts": {
+    "internal_train": 25005,
+    "internal_val": 6249,
+    "official_valid": 202
+  },
+  "positive_counts": {
+    "internal_train": 18699.0,
+    "internal_val": 4686.0,
+    "official_valid": 66.0
+  },
+  "patient_overlap_train_val": 0
+}
