@@ -15,11 +15,19 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--val-fraction", type=float, default=0.2)
+    parser.add_argument("--label-policy", choices=["clean", "u-ignore"], default="clean")
+    parser.add_argument("--output-name", default=None)
     args = parser.parse_args()
 
     frame = pd.read_csv(args.manifest)
     label_column = "Cardiomegaly"
-    clean = frame[frame[label_column].isin([0, 1])].copy()
+    if args.label_policy == "clean":
+        clean = frame[frame[label_column].isin([0, 1])].copy()
+    else:
+        # U-Ignore masks explicit uncertain labels (-1), while an unmentioned
+        # finding (blank/NaN) is treated as negative, matching CheXpert's 0/1/u setup.
+        clean = frame[frame[label_column].ne(-1)].copy()
+        clean[label_column] = clean[label_column].fillna(0).astype(int)
     train = clean[clean["split"].eq("train")].copy()
     official_valid = clean[clean["split"].eq("valid")].copy()
 
@@ -35,10 +43,13 @@ def main() -> None:
     result = pd.concat([train, official_valid], ignore_index=True)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    result.to_csv(args.output_dir / "cardiomegaly_clean_patient_split.csv", index=False)
+    output_name = args.output_name or ("cardiomegaly_clean_patient_split.csv" if args.label_policy == "clean" else "cardiomegaly_u_ignore_patient_split.csv")
+    result.to_csv(args.output_dir / output_name, index=False)
     report = {
         "seed": args.seed,
         "val_fraction": args.val_fraction,
+        "label_policy": args.label_policy,
+        "output_file": output_name,
         "rows": len(result),
         "patient_counts": result.groupby("internal_split")["Patient"].nunique().to_dict(),
         "row_counts": result["internal_split"].value_counts().to_dict(),

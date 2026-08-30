@@ -14,7 +14,11 @@ def seed_everything(seed: int) -> None:
     random.seed(seed); np.random.seed(seed); torch.manual_seed(seed); torch.cuda.manual_seed_all(seed)
 
 def resolve_image(row: pd.Series, data_root: Path) -> Path:
-    for path in (Path(str(row.get("image_path", ""))), data_root / str(row["Path"])):
+    relative = str(row["Path"]).replace("\\", "/")
+    prefix = "CheXpert-v1.0-small/"
+    if relative.startswith(prefix):
+        relative = relative[len(prefix):]
+    for path in (Path(str(row.get("image_path", ""))), data_root / relative):
         if path.is_file(): return path
     raise FileNotFoundError(f"Image not found: {row.get('Path')} (root={data_root})")
 
