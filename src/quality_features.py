@@ -26,7 +26,9 @@ def features(image_path: Path, row: pd.Series, min_size=256):
     return {"decode_ok":1,"width":w,"height":h,"aspect_ratio":w/h,"foreground_ratio":fg,"dynamic_range":dr,"mean_intensity":float(a.mean()),"intensity_std":float(a.std()),"contrast":contrast,"blur_score":grad,"noise_score":noise,"black_ratio":black,"white_ratio":white,"border_crop_score":border,"left_right_symmetry":symmetry,"center_offset":float(abs(np.average(np.arange(w),weights=a.mean(axis=0))/w-.5)),"projection_ap":projection_ap,"projection_unknown":projection_unknown,"quality_risk":risk,"hard_fail":int(bool(reasons)),"hard_fail_reasons":";".join(reasons)}
 
 def main():
-    p=argparse.ArgumentParser(); p.add_argument("--manifest",type=Path,required=True); p.add_argument("--data-root",type=Path,required=True); p.add_argument("--output",type=Path,required=True); p.add_argument("--max-samples",type=int); args=p.parse_args(); df=pd.read_csv(args.manifest); df=df.head(args.max_samples) if args.max_samples else df; rows=[]
+    p=argparse.ArgumentParser(); p.add_argument("--manifest",type=Path,required=True); p.add_argument("--data-root",type=Path,required=True); p.add_argument("--output",type=Path,required=True); p.add_argument("--max-samples",type=int); p.add_argument("--split-column"); p.add_argument("--split"); args=p.parse_args(); df=pd.read_csv(args.manifest)
+    if args.split_column and args.split is not None: df=df[df[args.split_column].eq(args.split)].copy()
+    df=df.head(args.max_samples) if args.max_samples else df; rows=[]
     for _,r in df.iterrows():
         x=features(resolve_image(r,args.data_root),r); x["Path"]=r["Path"]; x["Patient"]=r.get("Patient",""); x["Study"]=r.get("Study",""); x["internal_split"]=r.get("internal_split",""); x["Cardiomegaly"]=r.get("Cardiomegaly",""); rows.append(x)
     args.output.parent.mkdir(parents=True,exist_ok=True); pd.DataFrame(rows).to_csv(args.output,index=False); print(json.dumps({"rows":len(rows),"hard_fail":int(sum(x.get("hard_fail",1) for x in rows))},indent=2))
