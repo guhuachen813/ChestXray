@@ -16,13 +16,14 @@ def features(image_path: Path, row: pd.Series, min_size=256):
     if w/h < .5 or w/h > 1.8: reasons.append("aspect_ratio")
     if dr < 60/255: reasons.append("low_dynamic_range")
     if black > .98 or white > .98: reasons.append("near_constant")
-    if fg < .08 or fg > .45: reasons.append("foreground_ratio")
+    # CheXpert PNGs are mostly nonzero after conversion; .45 rejects nearly every valid image.
+    if fg < .05 or fg > .99: reasons.append("foreground_ratio")
     if str(row.get("Frontal/Lateral", "Frontal")) != "Frontal": reasons.append("lateral")
     projection=str(row.get("AP/PA", "")); projection_ap=int(projection=="AP"); projection_unknown=int(projection not in {"AP","PA"})
     border=float(np.mean(np.r_[a[:max(1,h//50),:].mean(),a[-max(1,h//50):,:].mean(),a[:,:max(1,w//50)].mean(),a[:,-max(1,w//50):].mean()]))
     mid=w//2; symmetry=float(np.mean(np.abs(a[:,:mid]-np.fliplr(a[:,-mid:])))) if mid else 1.
     contrast=float(np.quantile(a,.95)-np.quantile(a,.05)); noise=float(np.std(a - np.asarray(Image.fromarray((a*255).astype(np.uint8)).filter(ImageFilter.MedianFilter(3)),dtype=np.float32)/255.))
-    risk=float(np.mean([dr < 80/255, fg < .10 or fg > .40, contrast < .12, grad < 0.0008, noise > .08, border > .12, symmetry > .20, projection_ap, projection_unknown]))
+    risk=float(np.mean([dr < 80/255, fg < .06 or fg > .99, contrast < .12, grad < 0.0008, noise > .08, border > .12, symmetry > .20, projection_ap, projection_unknown]))
     return {"decode_ok":1,"width":w,"height":h,"aspect_ratio":w/h,"foreground_ratio":fg,"dynamic_range":dr,"mean_intensity":float(a.mean()),"intensity_std":float(a.std()),"contrast":contrast,"blur_score":grad,"noise_score":noise,"black_ratio":black,"white_ratio":white,"border_crop_score":border,"left_right_symmetry":symmetry,"center_offset":float(abs(np.average(np.arange(w),weights=a.mean(axis=0))/w-.5)),"projection_ap":projection_ap,"projection_unknown":projection_unknown,"quality_risk":risk,"hard_fail":int(bool(reasons)),"hard_fail_reasons":";".join(reasons)}
 
 def main():
