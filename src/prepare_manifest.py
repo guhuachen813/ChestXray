@@ -31,6 +31,7 @@ def main() -> None:
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--label", default="Cardiomegaly")
+    parser.add_argument("--include-lateral", action="store_true", help="Keep lateral rows for QC rejection-rate reporting.")
     args = parser.parse_args()
 
     root = args.data_root.resolve()
@@ -40,7 +41,8 @@ def main() -> None:
     frames = []
     for split in ("train", "valid"):
         frame = read_split(root, split)
-        frame = frame[frame["Frontal/Lateral"].eq("Frontal")].copy()
+        if not args.include_lateral:
+            frame = frame[frame["Frontal/Lateral"].eq("Frontal")].copy()
         frame["label_status"] = frame[args.label].map({1: "positive", 0: "negative", -1: "uncertain"})
         def resolve_image(value: str) -> Path:
             normalized = str(value).replace("\\", "/")
