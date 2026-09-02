@@ -148,8 +148,34 @@ def main() -> None:
     curve.to_csv(args.output_dir / "coverage_risk.csv", index=False)
     pd.concat([distribution(route, "route_validation"), distribution(official, "official_valid")], ignore_index=True).to_csv(args.output_dir / "confidence_distribution.csv", index=False)
     comparisons = {
-        "route_validation": bootstrap_difference(route, "p_fusion", "p1_positive", args.bootstrap, args.seed, args.bootstrap_unit),
-        "official_valid": bootstrap_difference(official, "p_fusion", "p1_positive", args.bootstrap, args.seed, args.bootstrap_unit),
+        "route_validation": {
+            "fusion_minus_densenet": bootstrap_difference(route, "p_fusion", "p1_positive", args.bootstrap, args.seed, args.bootstrap_unit),
+            "fusion_minus_resnet": bootstrap_difference(route, "p_fusion", "p2_positive", args.bootstrap, args.seed + 1, args.bootstrap_unit),
+            "densenet_minus_resnet": bootstrap_difference(route, "p1_positive", "p2_positive", args.bootstrap, args.seed + 2, args.bootstrap_unit),
+        },
+        "official_valid": {
+            "fusion_minus_densenet": bootstrap_difference(official, "p_fusion", "p1_positive", args.bootstrap, args.seed, args.bootstrap_unit),
+            "fusion_minus_resnet": bootstrap_difference(official, "p_fusion", "p2_positive", args.bootstrap, args.seed + 1, args.bootstrap_unit),
+            "densenet_minus_resnet": bootstrap_difference(official, "p1_positive", "p2_positive", args.bootstrap, args.seed + 2, args.bootstrap_unit),
+        },
+    }
+    # Primary v1.1 comparison: use the 75% cutoff selected on route-validation
+    # and evaluate the corresponding accepted subsets in both splits.
+    route_75 = top_fraction(route, .75)
+    cutoff_75 = float(route_75["confidence"].min())
+    official_75 = official[official["confidence"] >= cutoff_75]
+    comparisons["matched_coverage_75"] = {
+        "route_validation": {
+            "fusion_minus_densenet": bootstrap_difference(route_75, "p_fusion", "p1_positive", args.bootstrap, args.seed + 10, args.bootstrap_unit),
+            "fusion_minus_resnet": bootstrap_difference(route_75, "p_fusion", "p2_positive", args.bootstrap, args.seed + 11, args.bootstrap_unit),
+        },
+        "official_valid": {
+            "fusion_minus_densenet": bootstrap_difference(official_75, "p_fusion", "p1_positive", args.bootstrap, args.seed + 12, args.bootstrap_unit),
+            "fusion_minus_resnet": bootstrap_difference(official_75, "p_fusion", "p2_positive", args.bootstrap, args.seed + 13, args.bootstrap_unit),
+        },
+        "route_cutoff": cutoff_75,
+        "route_coverage": len(route_75) / len(route),
+        "official_coverage": len(official_75) / len(official),
     }
     (args.output_dir / "bootstrap_risk_ci.json").write_text(json.dumps(comparisons, indent=2), encoding="utf-8")
     complementarity = {"route_validation": {"densenet_error": error_rate(route, "p1_positive"), "resnet_error": error_rate(route, "p2_positive"), "fusion_error": error_rate(route, "p_fusion")}, "official_valid": {"densenet_error": error_rate(official, "p1_positive"), "resnet_error": error_rate(official, "p2_positive"), "fusion_error": error_rate(official, "p_fusion")}}
