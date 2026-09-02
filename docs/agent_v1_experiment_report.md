@@ -343,15 +343,36 @@ official valid 只有 202 张图像，风险估计不稳定，不能据此宣称
 
 - official valid 只有 202 张图像，置信区间较宽；
 - Soft QC 是启发式图像统计，不是临床质量真值；
-- 尚未完成所有 reliability diagram 的图形化输出；
+- v1.1 已生成 reliability diagram、coverage-risk 曲线和 Bootstrap CI；
 - 尚未进行多随机种子稳健性实验；
 - 当前 NaN -> negative 的 U-MultiClass 处理需要在论文方法部分明确说明。
 
 建议后续：
 
-1. 生成 reliability diagram 和 bootstrap 置信区间；
-2. 用多个随机种子重复训练和患者级划分；
-3. 在固定 coverage 点比较 Baseline-Threshold 与 Agent；
-4. 完成合成扰动及 Hard/Soft QC 追捕率曲线；
+1. 用多个随机种子重复训练和患者级划分；
+2. 在固定 coverage 点比较 Baseline-Threshold 与 Agent；
+3. 完成合成扰动及 Hard/Soft QC 追捕率曲线；
+4. 增加独立外部验证数据；
 5. 如继续研究 Model 2，增加独立验证数据或重新训练，不在 official valid 上继续调参。
 
+## 17. v1.1 覆盖率空间诊断结果
+
+v1.1 不再把固定概率阈值作为跨集合的主要工作点，而是在 route-validation 上按 DenseNet-121 calibrated confidence 排序，选择目标 coverage，再将相同 cutoff 应用到 official-valid。75% 工作点结果为：
+
+| 数据集 | cutoff | observed coverage | DenseNet selective risk |
+|---|---:|---:|---:|
+| route-validation | 0.840923 | 75.00% | 3.84% |
+| official-valid | 同一 cutoff | 77.72% | 17.83% |
+
+这说明 confidence 排序具有一定迁移性，但 accepted 样本的风险在 official-valid 上明显升高，提示存在 selective-risk distribution shift。
+
+在全体已知标签样本上，Bootstrap 结果显示：
+
+- route-validation 中 Fusion 相对 DenseNet 的错误率差为 -1.58 个百分点，95% CI 为 [-1.88, -1.29]；
+- official-valid 中 Fusion 相对 DenseNet 的错误率差为 +2.48 个百分点，95% CI 为 [-0.49, 5.47]，不能确认 Fusion 优势；
+- route-validation 中 DenseNet 相对 ResNet 的错误率差为 +1.94 个百分点，ResNet 较好；
+- official-valid 中 DenseNet 相对 ResNet 的错误率差为 -3.96 个百分点，DenseNet 较好，说明模型排名对数据分布敏感。
+
+固定 75% coverage 后，route-validation 上 Fusion 与 DenseNet 的差异接近 0 且置信区间跨 0；official-valid 的 157 个 accepted 样本中三个模型的二分类错误计数恰好相同。该现象不构成模型等价证明，主要反映小样本和固定排序子集的限制。
+
+因此 v1.1 的主结论是：coverage-based confidence ranking 比固定绝对概率阈值更适合描述跨集合迁移，但它不能消除 official-valid 上的风险分布偏移。ResNet-50 和 Fusion 保留为异构模型消融，不纳入主 Agent 决策。

@@ -84,6 +84,30 @@ def bootstrap_difference(df: pd.DataFrame, left: str, right: str, n_boot: int, s
             "n_bootstrap": n_boot, "unit": unit, "rows": len(work)}
 
 
+def bootstrap_risk(df: pd.DataFrame, prob: str, n_boot: int, seed: int, unit: str) -> dict:
+    """Bootstrap a selective-risk estimate for a fixed accepted subset."""
+    rng = np.random.default_rng(seed)
+    work = df.copy()
+    samples = []
+    if unit == "patient" and "Patient" in work.columns:
+        groups = work.groupby("Patient", sort=False).indices
+        keys = np.array(list(groups), dtype=object)
+        for _ in range(n_boot):
+            chosen = rng.choice(keys, size=len(keys), replace=True)
+            idx = np.concatenate([groups[k] for k in chosen])
+            samples.append(error_rate(work.iloc[idx], prob))
+    else:
+        unit = "image"
+        for _ in range(n_boot):
+            idx = rng.integers(0, len(work), len(work))
+            samples.append(error_rate(work.iloc[idx], prob))
+    samples = np.asarray(samples)
+    return {"probability": prob, "point_estimate": error_rate(work, prob),
+            "ci_lower": float(np.quantile(samples, .025)),
+            "ci_upper": float(np.quantile(samples, .975)),
+            "n_bootstrap": n_boot, "unit": unit, "rows": len(work)}
+
+
 def distribution(df: pd.DataFrame, split: str) -> pd.DataFrame:
     records = []
     for col in ("confidence", "p1_positive", "p1_uncertain", "entropy", "p2_positive", "disagreement"):
@@ -176,6 +200,14 @@ def main() -> None:
         "route_cutoff": cutoff_75,
         "route_coverage": len(route_75) / len(route),
         "official_coverage": len(official_75) / len(official),
+    }
+    comparisons["matched_coverage_75"]["risk_ci"] = {
+        "route_validation_densenet": bootstrap_risk(route_75, "p1_positive", args.bootstrap, args.seed + 20, args.bootstrap_unit),
+        "route_validation_resnet": bootstrap_risk(route_75, "p2_positive", args.bootstrap, args.seed + 21, args.bootstrap_unit),
+        "route_validation_fusion": bootstrap_risk(route_75, "p_fusion", args.bootstrap, args.seed + 22, args.bootstrap_unit),
+        "official_valid_densenet": bootstrap_risk(official_75, "p1_positive", args.bootstrap, args.seed + 23, args.bootstrap_unit),
+        "official_valid_resnet": bootstrap_risk(official_75, "p2_positive", args.bootstrap, args.seed + 24, args.bootstrap_unit),
+        "official_valid_fusion": bootstrap_risk(official_75, "p_fusion", args.bootstrap, args.seed + 25, args.bootstrap_unit),
     }
     (args.output_dir / "bootstrap_risk_ci.json").write_text(json.dumps(comparisons, indent=2), encoding="utf-8")
     complementarity = {"route_validation": {"densenet_error": error_rate(route, "p1_positive"), "resnet_error": error_rate(route, "p2_positive"), "fusion_error": error_rate(route, "p_fusion")}, "official_valid": {"densenet_error": error_rate(official, "p1_positive"), "resnet_error": error_rate(official, "p2_positive"), "fusion_error": error_rate(official, "p_fusion")}}
