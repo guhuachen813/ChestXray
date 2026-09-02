@@ -65,7 +65,16 @@ def main():
         model.train(); running = 0.0
         for images, target in train_loader:
             optimizer.zero_grad(set_to_none=True); logits = model(images.to(device)); loss = criterion(logits if args.num_classes == 3 else logits.flatten(), target.to(device)); loss.backward(); optimizer.step(); running += loss.item() * len(target)
-        val_logits, val_labels = predict_outputs(model, val_loader, device); val_probs = probabilities(val_logits, args.num_classes); p = val_probs[:, 1] if args.num_classes == 3 else val_probs[:, 0]; known = val_labels != 2 if args.num_classes == 3 else np.ones(len(val_labels), bool); yy, pp = val_labels[known], p[known]; val_loss = float(-(yy * np.log(np.clip(pp, 1e-7, 1 - 1e-7)) + (1 - yy) * np.log(np.clip(1 - pp, 1e-7, 1 - 1e-7))).mean()); record = {"epoch": epoch, "train_loss": running / len(train_frame), "val_loss": val_loss}; history.append(record); print(json.dumps(record))
+        val_logits, val_labels = predict_outputs(model, val_loader, device)
+        # Report validation loss with the same criterion used for optimization.
+        val_logits_tensor = torch.from_numpy(val_logits).to(device)
+        if args.num_classes == 3:
+            val_labels_tensor = torch.from_numpy(val_labels).long().to(device)
+            val_loss = float(criterion(val_logits_tensor, val_labels_tensor).item())
+        else:
+            val_labels_tensor = torch.from_numpy(val_labels).float().to(device)
+            val_loss = float(criterion(val_logits_tensor.flatten(), val_labels_tensor).item())
+        val_probs = probabilities(val_logits, args.num_classes); p = val_probs[:, 1] if args.num_classes == 3 else val_probs[:, 0]; known = val_labels != 2 if args.num_classes == 3 else np.ones(len(val_labels), bool); yy, pp = val_labels[known], p[known]; record = {"epoch": epoch, "train_loss": running / len(train_frame), "val_loss": val_loss}; history.append(record); print(json.dumps(record))
         if val_loss < best_loss:
             best_loss = val_loss; state = {"model": model.state_dict(), "epoch": epoch, "seed": args.seed, "num_classes": args.num_classes, "arch": args.arch, "threshold": choose_threshold(yy, pp)}; torch.save(state, args.output_dir / "best.pt"); torch.save(state, args.output_dir / f"{args.arch}_cardiomegaly_best.pt")
     (args.output_dir / "train_metadata.json").write_text(json.dumps({"device": str(device), "arch": args.arch, "num_classes": args.num_classes, "epochs": args.epochs, "seed": args.seed, "train_rows": len(train_frame), "val_rows": len(val_frame), "elapsed_seconds": time.time() - started, "history": history}, indent=2), encoding="utf-8")

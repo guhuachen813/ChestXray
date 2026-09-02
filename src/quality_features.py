@@ -1,4 +1,12 @@
-"""Reproducible Hard/Soft QC features without proprietary quality models."""
+"""Reproducible Hard/Soft QC features without proprietary quality models.
+
+Hard QC thresholds are heuristic and tuned on CheXpert-v1.0-small samples:
+  - min_size=256: exclude very small thumbnails;
+  - aspect_ratio in [0.5, 1.8]: typical chest X-ray geometry;
+  - dynamic_range >= 60/255: exclude near-constant images;
+  - foreground_ratio in [0.05, 0.99]: exclude almost empty or saturated images.
+These thresholds are input-validity gates, not clinical quality labels.
+"""
 from __future__ import annotations
 import argparse, json
 from pathlib import Path

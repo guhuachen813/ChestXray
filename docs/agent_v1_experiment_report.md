@@ -375,4 +375,17 @@ v1.1 不再把固定概率阈值作为跨集合的主要工作点，而是在 ro
 
 固定 75% coverage 后，route-validation 上 Fusion 与 DenseNet 的差异接近 0 且置信区间跨 0；official-valid 的 157 个 accepted 样本中三个模型的二分类错误计数恰好相同。该现象不构成模型等价证明，主要反映小样本和固定排序子集的限制。
 
+75% 工作点的患者级 Bootstrap selective-risk CI 为：
+
+| 数据集/模型 | risk | 95% CI |
+|---|---:|---:|
+| route-validation / DenseNet-121 | 3.84% | [3.46%, 4.26%] |
+| route-validation / ResNet-50 | 3.98% | [3.57%, 4.39%] |
+| route-validation / Fusion | 3.83% | [3.44%, 4.23%] |
+| official-valid / DenseNet-121 | 17.83% | [12.10%, 24.20%] |
+| official-valid / ResNet-50 | 17.83% | [12.10%, 24.05%] |
+| official-valid / Fusion | 17.83% | [11.95%, 24.20%] |
+
+在 official-valid 的 157 个 accepted 样本上，三种方法的错误计数完全相同，因此方法间风险差的 Bootstrap CI 为 [0, 0]。由于 accepted 子集较小，这只能说明本次二分类决策计数一致，不能证明模型概率或校准性能等价。
+
 因此 v1.1 的主结论是：coverage-based confidence ranking 比固定绝对概率阈值更适合描述跨集合迁移，但它不能消除 official-valid 上的风险分布偏移。ResNet-50 和 Fusion 保留为异构模型消融，不纳入主 Agent 决策。
