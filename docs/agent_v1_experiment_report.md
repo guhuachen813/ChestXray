@@ -389,3 +389,19 @@ v1.1 不再把固定概率阈值作为跨集合的主要工作点，而是在 ro
 在 official-valid 的 157 个 accepted 样本上，三种方法的错误计数完全相同，因此方法间风险差的 Bootstrap CI 为 [0, 0]。由于 accepted 子集较小，这只能说明本次二分类决策计数一致，不能证明模型概率或校准性能等价。
 
 因此 v1.1 的主结论是：coverage-based confidence ranking 比固定绝对概率阈值更适合描述跨集合迁移，但它不能消除 official-valid 上的风险分布偏移。ResNet-50 和 Fusion 保留为异构模型消融，不纳入主 Agent 决策。
+
+## 18. 多随机种子稳健性结果
+
+为检查 coverage 工作点是否依赖单个随机划分，使用 seed=42、7、21 分别重新建立患者级划分、训练 DenseNet-121/ResNet-50、拟合温度，并在 route-validation 上选择 75% coverage cutoff。结果如下：
+
+| Seed | Route cutoff | Route coverage | Route risk | Official coverage | Official risk | Official risk 95% CI |
+|---:|---:|---:|---:|---:|---:|---:|
+| 42 | 0.8409 | 75.00% | 3.84% | 77.72% | 17.83% | [12.10%, 24.20%] |
+| 7 | 0.8381 | 75.00% | 3.13% | 79.21% | 20.63% | [14.47%, 27.22%] |
+| 21 | 0.8612 | 75.00% | 3.46% | 80.20% | 19.75% | [13.75%, 25.93%] |
+
+三组 cutoff 位于 0.8381-0.8612，route-validation coverage 均约为 75%，official-valid coverage 为 77.72%-80.20%。这说明按 coverage 选择的 confidence 工作点具有一定稳定性，且实际迁移 coverage 没有大幅偏离目标。
+
+另一方面，route-validation selective risk 为 3.13%-3.84%，而 official-valid selective risk 为 17.83%-20.63%。风险在三个 seed 上都出现同方向、数量级明显的上升，因此这不是单个 seed 的偶然现象，更符合 official-valid 的分布差异或任务难度差异。Bootstrap 区间较宽，原因是 official-valid 只有 202 个样本，不能用它精确估计真实风险。
+
+多 seed 结果进一步支持以下实验定位：DenseNet-121 calibrated confidence ranking 可作为 v1.1 的主选择性分类机制；ResNet-50 和 Fusion 不具有稳定跨 seed、跨 split 的额外收益；后续应增加独立外部验证样本，而不是继续在 official-valid 上调绝对 confidence 阈值。
