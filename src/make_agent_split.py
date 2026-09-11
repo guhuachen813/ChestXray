@@ -101,9 +101,11 @@ def main():
         raise ValueError("Expected non-empty frontal train and valid subsets.")
 
     patient_labels = train.groupby("Patient")["Cardiomegaly"].agg(_patient_label)
-    observed = train.groupby("Patient")["Cardiomegaly_raw"].apply(lambda values: values.notna().any())
-    eligible = patient_labels[observed].copy()
-    unassigned_patients = set(patient_labels.index[~observed])
+    # Missing Cardiomegaly entries are mapped to negative under U-MultiClass.
+    # They must therefore remain in the negative patient stratum rather than
+    # being assigned wholesale to model_train.
+    eligible = patient_labels
+    unassigned_patients: set[str] = set()
 
     assignments: dict[str, str] = {}
     for label_value, group in eligible.groupby(eligible):
@@ -114,9 +116,6 @@ def main():
             assignments.update({str(patient): split for patient in shuffled.index[start : start + count]})
             start += count
 
-    # Patients with no observed Cardiomegaly value are retained for training,
-    # but are never used to determine the stratified holdout boundaries.
-    assignments.update({str(patient): "model_train" for patient in unassigned_patients})
     train["agent_split"] = train["Patient"].map(assignments)
     if train["agent_split"].isna().any():
         raise RuntimeError("Some training patients were not assigned to an Agent split.")
@@ -130,10 +129,9 @@ def main():
     out.to_csv(args.output_dir / out_name, index=False)
 
     split_summary = _split_summary(out)
-    pooled_known = train["Cardiomegaly_raw"].isin([0, 1])
-    pooled_rate = float(train.loc[pooled_known, "Cardiomegaly_raw"].eq(1).mean())
+    pooled_rate = float(train["Cardiomegaly"].eq(1).mean())
     split_rate_deviation = {
-        split: abs(details["known_binary_positive_rate"] - pooled_rate)
+        split: abs(float(details["mapped_label_counts"].get("1", 0)) / details["rows"] - pooled_rate)
         for split, details in split_summary.items()
         if split in SPLITS and details["known_binary_positive_rate"] is not None
     }
@@ -148,8 +146,8 @@ def main():
         "rows": int(len(out)),
         "lateral_rows_excluded_from_agent": lateral_rows,
         "unassigned_patients_with_no_observed_label": len(unassigned_patients),
-        "pooled_train_known_binary_positive_rate": pooled_rate,
-        "split_known_binary_positive_rate_deviation": split_rate_deviation,
+        "pooled_train_mapped_positive_rate": pooled_rate,
+        "split_mapped_positive_rate_deviation": split_rate_deviation,
         "split_summary": split_summary,
         "patient_overlap": _patient_overlap(out),
         "official_valid_patient_overlap_with_train": len(
@@ -157,7 +155,7 @@ def main():
         ),
         "validation": {
             "patient_overlap_ok": overlap_ok,
-            "prevalence_deviation_le_1_5pp_ok": prevalence_ok,
+            "mapped_positive_rate_deviation_le_1_5pp_ok": prevalence_ok,
             "official_valid_overlap_ok": official_overlap_ok,
             "status": "PASS" if overlap_ok and prevalence_ok and official_overlap_ok else "CHECK",
         },
