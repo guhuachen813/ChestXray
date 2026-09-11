@@ -132,6 +132,14 @@ def main():
     split_summary = _split_summary(out)
     pooled_known = train["Cardiomegaly_raw"].isin([0, 1])
     pooled_rate = float(train.loc[pooled_known, "Cardiomegaly_raw"].eq(1).mean())
+    split_rate_deviation = {
+        split: abs(details["known_binary_positive_rate"] - pooled_rate)
+        for split, details in split_summary.items()
+        if split in SPLITS and details["known_binary_positive_rate"] is not None
+    }
+    overlap_ok = all(value == 0 for value in _patient_overlap(out).values())
+    prevalence_ok = all(value <= 0.015 for value in split_rate_deviation.values())
+    official_overlap_ok = len(set(official["Patient"]) & set(train["Patient"])) == 0
     report = {
         "script_version": "stratified_patient_split_v2",
         "seed": args.seed,
@@ -141,11 +149,18 @@ def main():
         "lateral_rows_excluded_from_agent": lateral_rows,
         "unassigned_patients_with_no_observed_label": len(unassigned_patients),
         "pooled_train_known_binary_positive_rate": pooled_rate,
+        "split_known_binary_positive_rate_deviation": split_rate_deviation,
         "split_summary": split_summary,
         "patient_overlap": _patient_overlap(out),
         "official_valid_patient_overlap_with_train": len(
             set(official["Patient"]) & set(train["Patient"])
         ),
+        "validation": {
+            "patient_overlap_ok": overlap_ok,
+            "prevalence_deviation_le_1_5pp_ok": prevalence_ok,
+            "official_valid_overlap_ok": official_overlap_ok,
+            "status": "PASS" if overlap_ok and prevalence_ok and official_overlap_ok else "CHECK",
+        },
     }
     (args.output_dir / "agent_split_report.json").write_text(
         json.dumps(report, indent=2), encoding="utf-8"
