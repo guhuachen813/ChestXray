@@ -344,7 +344,7 @@ official valid 只有 202 张图像，风险估计不稳定，不能据此宣称
 - official valid 只有 202 张图像，置信区间较宽；
 - Soft QC 是启发式图像统计，不是临床质量真值；
 - v1.1 已生成 reliability diagram、coverage-risk 曲线和 Bootstrap CI；
-- 尚未进行多随机种子稳健性实验；
+- 修复后的患者级分层目前已完成 seed42 和 seed7，seed21 尚未完成；
 - 当前 NaN -> negative 的 U-MultiClass 处理需要在论文方法部分明确说明。
 
 建议后续：
@@ -355,7 +355,75 @@ official valid 只有 202 张图像，风险估计不稳定，不能据此宣称
 4. 增加独立外部验证数据；
 5. 如继续研究 Model 2，增加独立验证数据或重新训练，不在 official valid 上继续调参。
 
-## 17. v1.1 覆盖率空间诊断结果
+## 17. 修复患者级划分后的结果（有效结果）
+
+### 17.1 划分修复
+
+审计发现旧版 `make_agent_split.py` 在按患者众数标签分组后进行全局切片，导致 calibration、route-validation 和 model-selection 的患病率异常偏低。旧版相关结果保留在原目录中，仅作为 `invalid_split_diagnostic`，不再作为主结论。
+
+修复版脚本 `stratified_patient_split_v2` 在每个患者标签层内独立随机分配四个集合，并在写出 CSV 前重新打乱行顺序。seed42 的训练相关集合 mapped positive rate 为 12.01%-12.29%，seed7 为 11.65%-12.29%；所有集合两两患者重叠均为 0，official-valid 与训练患者重叠为 0。
+
+### 17.2 修复后 temperature
+
+temperature 仅使用修复后的 calibration 集拟合：
+
+| Seed | DenseNet-121 | ResNet-50 | Calibration rows |
+|---:|---:|---:|---:|
+| 42 | 0.494342 | 0.542644 | 19,018 |
+| 7 | 0.442687 | 0.768727 | 19,053 |
+
+两个架构使用各自独立的 temperature。旧版错误划分得到的 temperature 不再使用。
+
+### 17.3 修复后 DenseNet-121 严格二分类指标
+
+二分类指标只在 `Cardiomegaly ∈ {0,1}` 的已知标签样本上计算，uncertain 样本不作为阴性。概率为经过 temperature scaling 的 `p1_positive`。
+
+| Seed | Split | Known rows | AUROC | Binary ECE | Multiclass ECE |
+|---:|---|---:|---:|---:|---:|
+| 42 | route-validation | 17,816 | 0.8440 | 0.0201 | 0.0459 |
+| 42 | official-valid | 202 | 0.8289 | 0.1809 | 0.1389 |
+| 7 | route-validation | 18,388 | 0.8440 | 0.0335 | 0.0288 |
+| 7 | official-valid | 202 | 0.8307 | 0.1838 | 0.1343 |
+
+当前 `evaluate.py` JSON 中直接输出的 AUROC 会把三分类标签混入计算，不用于最终二分类表；上表使用独立脚本严格排除了 uncertain。Binary ECE 同样只使用已知二分类样本。
+
+### 17.4 修复后 75% coverage 工作点
+
+coverage cutoff 只在 route-validation 上选择，official-valid 不参与调参：
+
+| Seed | Route cutoff | Route coverage | Route risk | Official coverage | Official risk | Official risk 95% CI |
+|---:|---:|---:|---:|---:|---:|---:|
+| 42 | 0.83375 | 75.00% | 6.09% | 80.69% | 22.09% | [15.76%, 28.83%] |
+| 7 | 0.84080 | 75.00% | 6.55% | 81.19% | 20.73% | [14.63%, 26.99%] |
+
+两个 seed 的 cutoff 相差约 0.007，route-validation risk 相差 0.46 个百分点，说明 confidence 排序和工作点具有一定稳定性。另一方面，official-valid risk 均明显高于 route-validation，说明风险迁移现象在修复划分后仍然存在。
+
+### 17.5 修复后模型比较
+
+整体错误率如下：
+
+| Seed | Split | DenseNet-121 | ResNet-50 | Fusion |
+|---:|---|---:|---:|---:|
+| 42 | route-validation | 12.89% | 19.25% | 14.74% |
+| 42 | official-valid | 26.24% | 20.30% | 24.26% |
+| 7 | route-validation | 13.75% | 16.08% | 13.89% |
+| 7 | official-valid | 26.24% | 22.77% | 24.75% |
+
+DenseNet-121 在 route-validation 上更稳定；ResNet-50 在 official-valid 上显示一定互补性，但简单平均 Fusion 没有稳定优于单模型。因此 DenseNet-121 保留为主模型，ResNet-50 保留为异构模型消融，Fusion 仅作为对照。
+
+### 17.6 修复后结论
+
+1. 患者级分层修复消除了原先约 3% 患病率校准集造成的明显划分污染。
+2. 两个 seed 的严格二分类 AUROC 均约为 0.844（route-validation）和 0.830（official-valid），说明模型判别排序能力没有发生灾难性崩溃。
+3. Binary ECE 从 route-validation 的 0.020-0.033 上升到 official-valid 的 0.181-0.184，说明概率校准迁移明显失配。
+4. 75% coverage 工作点在 official-valid 上实际覆盖率约为 80.7%-81.2%，风险约为 20.7%-22.1%；该风险差异在两个 seed 上同方向出现，不能再简单归因于旧划分缺陷。
+5. 当前证据支持 DenseNet-121 作为主模型，但不支持简单 Fusion 或 ResNet-50 作为普遍优于主模型的策略。
+
+以上结果仍受 official-valid 仅 202 张图像、当前仅两个修复后 seed 以及弱标签口径差异限制。下一步应完成 seed21 或直接进入冻结模型的 MIMIC-CXR-JPG 外部验证，不应在 official-valid 上重新拟合 temperature 或 coverage cutoff。
+
+## 18. v1.1 覆盖率空间诊断结果（invalid_split_diagnostic）
+
+本节记录旧版错误患者级划分下的历史结果，仅用于问题追踪和与修复结果对照，不纳入主结论。
 
 v1.1 不再把固定概率阈值作为跨集合的主要工作点，而是在 route-validation 上按 DenseNet-121 calibrated confidence 排序，选择目标 coverage，再将相同 cutoff 应用到 official-valid。75% 工作点结果为：
 
@@ -390,7 +458,9 @@ v1.1 不再把固定概率阈值作为跨集合的主要工作点，而是在 ro
 
 因此 v1.1 的主结论是：coverage-based confidence ranking 比固定绝对概率阈值更适合描述跨集合迁移，但它不能消除 official-valid 上的风险分布偏移。ResNet-50 和 Fusion 保留为异构模型消融，不纳入主 Agent 决策。
 
-## 18. 多随机种子稳健性结果
+## 19. 多随机种子稳健性结果（invalid_split_diagnostic）
+
+本节记录旧版错误患者级划分下的历史多 seed 结果，仅用于问题追踪，不纳入主结论。修复后的多 seed 结果见第 17 节。
 
 为检查 coverage 工作点是否依赖单个随机划分，使用 seed=42、7、21 分别重新建立患者级划分、训练 DenseNet-121/ResNet-50、拟合温度，并在 route-validation 上选择 75% coverage cutoff。结果如下：
 
